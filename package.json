@@ -1,0 +1,13 @@
+{
+  "name": "smart-aquarium-dashboard",
+  "version": "1.0.0",
+  "description": "Dashboard & data logging untuk proyek Smart Mini Aquarium (SKIOT)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mqtt": "^5.10.1"
+  }
+}
