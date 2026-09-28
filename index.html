@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Smart Mini Aquarium - Dashboard</title>
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --accent:#38bdf8; --ok:#4ade80; --warn:#f87171; --mid:#facc15; --text:#e2e8f0; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,sans-serif; padding:24px; }
+  h1 { font-size:1.4rem; margin-bottom:4px; }
+  .sub { color:#94a3b8; margin-bottom:24px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin-bottom:24px; }
+  .card { background:var(--card); border-radius:12px; padding:18px; }
+  .card h3 { margin:0 0 8px; font-size:.85rem; color:#94a3b8; text-transform:uppercase; letter-spacing:.05em; }
+  .big { font-size:2rem; font-weight:600; }
+  .badge { font-size:.8rem; font-weight:600; margin-top:6px; display:block; }
+  .status-on { color:var(--ok); }
+  .status-off { color:var(--warn); }
+  button { background:var(--accent); border:none; color:#04212f; padding:10px 16px; border-radius:8px; font-weight:600; cursor:pointer; margin-right:8px; }
+  button.secondary { background:#334155; color:var(--text); }
+  input { background:#0f172a; border:1px solid #334155; color:var(--text); padding:8px; border-radius:6px; width:90px; }
+  label { display:block; font-size:.8rem; color:#94a3b8; margin-bottom:4px; margin-top:10px; }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid #334155; }
+  .section-title { margin-top:32px; margin-bottom:12px; font-size:1.1rem; }
+</style>
+</head>
+<body>
+
+<h1>🐟 Smart Mini Aquarium</h1>
+<div class="sub">Monitoring suhu, kontrol aerator & pemberi pakan otomatis</div>
+
+<div class="grid">
+  <div class="card">
+    <h3>Suhu Air</h3>
+    <div class="big" id="temp">-- °C</div>
+    <div class="badge" id="tempBadge"></div>
+  </div>
+  <div class="card">
+    <h3>Status Aerator</h3>
+    <div class="big" id="aerator">--</div>
+    <button onclick="kontrolAerator('on')">Nyalakan</button>
+    <button class="secondary" onclick="kontrolAerator('off')">Matikan</button>
+  </div>
+  <div class="card">
+    <h3>Mode</h3>
+    <div class="big" id="mode">--</div>
+    <button onclick="ubahMode('AUTO')">Auto</button>
+    <button class="secondary" onclick="ubahMode('MANUAL')">Manual</button>
+  </div>
+  <div class="card">
+    <h3>Pemberi Pakan</h3>
+    <button onclick="beriPakan()">Beri Pakan Sekarang</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Pengaturan Parameter</h3>
+  <label>Batas suhu bawah (°C) - batas aman</label>
+  <input type="number" id="setLow" step="0.1">
+  <label>Batas suhu atas (°C) - batas aman</label>
+  <input type="number" id="setHigh" step="0.1">
+  <label>Suhu ideal bawah (°C)</label>
+  <input type="number" id="idealLow" step="0.1">
+  <label>Suhu ideal atas (°C)</label>
+  <input type="number" id="idealHigh" step="0.1">
+  <label>Jadwal pakan 1 (HH:MM)</label>
+  <input type="text" id="feed1" placeholder="08:00">
+  <label>Jadwal pakan 2 (HH:MM)</label>
+  <input type="text" id="feed2" placeholder="17:00">
+  <br><br>
+  <button onclick="simpanSetting()">Simpan Pengaturan</button>
+</div>
+
+<div class="section-title">Histori Data (50 terakhir)</div>
+<div class="card">
+  <table id="tabelHistori">
+    <thead>
+      <tr><th>Waktu</th><th>Suhu (°C)</th><th>Status</th><th>Aerator</th><th>Mode</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+const statusMap = {
+  OPTIMAL: { label: '🟢 Optimal', color: 'var(--ok)' },
+  AMAN:    { label: '🟡 Aman',    color: 'var(--mid)' },
+  ALARM:   { label: '🔴 Alarm',   color: 'var(--warn)' }
+};
+
+async function ambilStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    document.getElementById('temp').innerText = data.temperature.toFixed(1) + ' °C';
+
+    const badge = document.getElementById('tempBadge');
+    const s = statusMap[data.temp_status] || statusMap.AMAN;
+    badge.innerText = s.label;
+    badge.style.color = s.color;
+
+    const aeratorEl = document.getElementById('aerator');
+    aeratorEl.innerText = data.aerator_status;
+    aeratorEl.className = 'big ' + (data.aerator_status === 'ON' ? 'status-on' : 'status-off');
+    document.getElementById('mode').innerText = data.mode;
+
+    document.getElementById('setLow').value = data.setpoint_low;
+    document.getElementById('setHigh').value = data.setpoint_high;
+    document.getElementById('idealLow').value = data.ideal_low;
+    document.getElementById('idealHigh').value = data.ideal_high;
+    document.getElementById('feed1').value = data.feed_schedule_1;
+    document.getElementById('feed2').value = data.feed_schedule_2;
+  } catch (e) {
+    console.error('Gagal ambil status', e);
+  }
+}
+
+async function ambilHistori() {
+  const res = await fetch('/api/history?limit=50');
+  const data = await res.json();
+  const tbody = document.querySelector('#tabelHistori tbody');
+  tbody.innerHTML = '';
+  data.reverse().forEach(row => {
+    const s = statusMap[row.temp_status] || statusMap.AMAN;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${new Date(row.timestamp).toLocaleString()}</td>
+                     <td>${row.temperature}</td>
+                     <td style="color:${s.color}">${s.label}</td>
+                     <td>${row.aerator_status}</td>
+                     <td>${row.mode}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function kontrolAerator(state) {
+  await fetch('/api/control', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ action: 'aerator', state })
+  });
+  ambilStatus();
+}
+
+async function ubahMode(mode) {
+  await fetch('/api/control', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ action: 'mode', value: mode })
+  });
+  ambilStatus();
+}
+
+async function beriPakan() {
+  await fetch('/api/control', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ action: 'feed' })
+  });
+}
+
+async function simpanSetting() {
+  await fetch('/api/settings', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      setpoint_low: parseFloat(document.getElementById('setLow').value),
+      setpoint_high: parseFloat(document.getElementById('setHigh').value),
+      ideal_low: parseFloat(document.getElementById('idealLow').value),
+      ideal_high: parseFloat(document.getElementById('idealHigh').value),
+      feed_schedule_1: document.getElementById('feed1').value,
+      feed_schedule_2: document.getElementById('feed2').value
+    })
+  });
+  alert('Pengaturan disimpan!');
+}
+
+ambilStatus();
+ambilHistori();
+setInterval(ambilStatus, 5000);
+setInterval(ambilHistori, 15000);
+</script>
+</body>
+</html>
